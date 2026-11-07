@@ -1,0 +1,437 @@
+<!DOCTYPE html>
+<html lang="tr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>ÖABT Tarih Çalışma Botu</title>
+    <script src="https://cdn.jsdelivr.net/npm/@tailwindcss/browser@4"></script>
+    <style>
+        /* PDF ve Yazdırma Düzeni - Karakter Bozulmasını Önleyen Evrensel Font */
+        @media print {
+            header, .cat-filter-area, .stats-bar, button, label, input, select {
+                display: none !important;
+            }
+            body {
+                background-color: white !important;
+                color: black !important;
+                font-family: Arial, Helvetica, sans-serif !important;
+            }
+            .print-area {
+                display: block !important;
+                font-family: Arial, Helvetica, sans-serif !important;
+            }
+            .print-card {
+                border: 1px solid #cbd5e1 !important;
+                page-break-inside: avoid;
+                margin-bottom: 12px;
+                padding: 12px;
+                border-radius: 8px;
+                background-color: #ffffff !important;
+            }
+        }
+    </style>
+</head>
+<body class="bg-slate-900 text-slate-100 min-h-screen font-sans">
+
+    <!-- Header -->
+    <header class="bg-slate-800 border-b border-slate-700 sticky top-0 z-50 shadow-md">
+        <div class="max-w-6xl mx-auto px-4 py-4 flex flex-col md:flex-row justify-between items-center gap-4">
+            <div>
+                <h1 class="text-2xl font-bold bg-gradient-to-r from-amber-400 to-orange-500 bg-clip-text text-transparent">ÖABT Tarih Çalışma Botu</h1>
+                <p class="text-xs text-slate-400">MEB-AGS & ÖABT Tarih Metodolojisi ve Kişisel Bilgi Bankası</p>
+            </div>
+            <div class="flex flex-wrap gap-2 items-center">
+                <button onclick="exportPDF()" class="bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-semibold px-3 py-2 rounded-lg transition shadow">PDF / Çıktı Al 🖨️</button>
+                <button onclick="shareBackup()" class="bg-blue-600 hover:bg-blue-500 text-white text-xs font-semibold px-3 py-2 rounded-lg transition shadow">Buluta / Paylaş 📲</button>
+                <button onclick="exportData()" class="bg-slate-700 hover:bg-slate-600 text-white text-xs font-semibold px-3 py-2 rounded-lg transition shadow">Yedek İndir (JSON) 💾</button>
+                <label class="bg-sky-600 hover:bg-sky-500 text-white text-xs font-semibold px-3 py-2 rounded-lg transition shadow cursor-pointer">
+                    Yedek Yükle <input type="file" id="importFile" accept=".json" class="hidden" onchange="importData(event)">
+                </label>
+                <button onclick="switchTab('flashcards')" id="btn-flashcards" class="tab-btn px-4 py-2 text-sm font-medium rounded-lg bg-amber-500 text-slate-900 transition">Çalışma Kartları</button>
+                <button onclick="switchTab('add')" id="btn-add" class="tab-btn px-4 py-2 text-sm font-medium rounded-lg bg-slate-700 text-slate-300 hover:bg-slate-600 transition">Not / Soru Ekle</button>
+                <button onclick="switchTab('manage')" id="btn-manage" class="tab-btn px-4 py-2 text-sm font-medium rounded-lg bg-rose-600/80 hover:bg-rose-600 text-white transition">Notlarımı Yönet</button>
+            </div>
+        </div>
+    </header>
+
+    <!-- Main Container -->
+    <main class="max-w-6xl mx-auto px-4 py-6">
+
+        <!-- Stats Bar -->
+        <div class="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6 stats-bar">
+            <div class="bg-slate-800 p-4 rounded-xl border border-slate-700 text-center">
+                <span class="text-xs text-slate-400 uppercase tracking-wider">Toplam Kart</span>
+                <h2 id="stat-total" class="text-2xl font-bold text-amber-400 mt-1">0</h2>
+            </div>
+            <div class="bg-slate-800 p-4 rounded-xl border border-slate-700 text-center">
+                <span class="text-xs text-slate-400 uppercase tracking-wider">Öğrenilen</span>
+                <h2 id="stat-learned" class="text-2xl font-bold text-emerald-400 mt-1">0</h2>
+            </div>
+            <div class="bg-slate-800 p-4 rounded-xl border border-slate-700 text-center">
+                <span class="text-xs text-slate-400 uppercase tracking-wider">Tekrar Edilecek</span>
+                <h2 id="stat-repeat" class="text-2xl font-bold text-rose-400 mt-1">0</h2>
+            </div>
+            <div class="bg-slate-800 p-4 rounded-xl border border-slate-700 text-center">
+                <span class="text-xs text-slate-400 uppercase tracking-wider">Kişisel Notlarım</span>
+                <h2 id="stat-custom" class="text-2xl font-bold text-sky-400 mt-1">0</h2>
+            </div>
+        </div>
+
+        <!-- TAB 1: FLASHCARDS -->
+        <section id="tab-flashcards" class="tab-content space-y-6">
+            <!-- Category Filter -->
+            <div class="flex flex-wrap gap-2 justify-center cat-filter-area" id="category-filters">
+                <button onclick="filterCategory('Tümü')" class="cat-btn px-3 py-1.5 text-xs font-semibold rounded-full bg-amber-500 text-slate-900 transition">Tümü</button>
+                <button onclick="filterCategory('Karışık Not')" class="cat-btn px-3 py-1.5 text-xs font-semibold rounded-full bg-slate-700 text-slate-300 hover:bg-slate-600 transition">Karışık Not</button>
+                <button onclick="filterCategory('Tarih Metodolojisi')" class="cat-btn px-3 py-1.5 text-xs font-semibold rounded-full bg-slate-700 text-slate-300 hover:bg-slate-600 transition">Tarih Metodolojisi</button>
+                <button onclick="filterCategory('İslam Öncesi Türk Tarihi')" class="cat-btn px-3 py-1.5 text-xs font-semibold rounded-full bg-slate-700 text-slate-300 hover:bg-slate-600 transition">İslam Öncesi</button>
+                <button onclick="filterCategory('İlk Çağ Tarihi')" class="cat-btn px-3 py-1.5 text-xs font-semibold rounded-full bg-slate-700 text-slate-300 hover:bg-slate-600 transition">İlk Çağ</button>
+                <button onclick="filterCategory('İslam Tarihi')" class="cat-btn px-3 py-1.5 text-xs font-semibold rounded-full bg-slate-700 text-slate-300 hover:bg-slate-600 transition">İslam Tarihi</button>
+                <button onclick="filterCategory('Türk-İslam Devletleri')" class="cat-btn px-3 py-1.5 text-xs font-semibold rounded-full bg-slate-700 text-slate-300 hover:bg-slate-600 transition">Türk-İslam</button>
+                <button onclick="filterCategory('Osmanlı Tarihi')" class="cat-btn px-3 py-1.5 text-xs font-semibold rounded-full bg-slate-700 text-slate-300 hover:bg-slate-600 transition">Osmanlı</button>
+                <button onclick="filterCategory('Avrupa Tarihi')" class="cat-btn px-3 py-1.5 text-xs font-semibold rounded-full bg-slate-700 text-slate-300 hover:bg-slate-600 transition">Avrupa</button>
+                <button onclick="filterCategory('İnkılap Tarihi')" class="cat-btn px-3 py-1.5 text-xs font-semibold rounded-full bg-slate-700 text-slate-300 hover:bg-slate-600 transition">İnkılap</button>
+                <button onclick="filterCategory('Çağdaş Türk ve Dünya Tarihi')" class="cat-btn px-3 py-1.5 text-xs font-semibold rounded-full bg-slate-700 text-slate-300 hover:bg-slate-600 transition">Çağdaş</button>
+            </div>
+
+            <!-- Card Display Area -->
+            <div class="max-w-xl mx-auto">
+                <div class="bg-slate-800 border border-slate-700 rounded-2xl p-6 shadow-xl space-y-6">
+                    <div class="flex justify-between items-center border-b border-slate-700 pb-3">
+                        <span id="card-cat" class="text-xs font-semibold px-2.5 py-1 bg-amber-500/10 text-amber-400 rounded-md">Kategori</span>
+                        <span class="text-xs text-slate-400">ÖABT Çalışma Kartı</span>
+                    </div>
+                    
+                    <div class="space-y-4">
+                        <div>
+                            <span class="text-[10px] uppercase font-bold text-slate-400 tracking-wider">Soru / Konu</span>
+                            <h3 id="card-question" class="text-base font-semibold text-slate-100 mt-1">Henüz kart eklenmedi.</h3>
+                        </div>
+                        <div class="bg-slate-900/80 border border-slate-700/60 p-4 rounded-xl">
+                            <span class="text-[10px] uppercase font-bold text-emerald-400 tracking-wider block mb-1">Cevap / Açıklama</span>
+                            <p id="card-answer" class="text-sm text-amber-200 font-medium">Lütfen üst menüden 'Not / Soru Ekle' sekmesini kullanın.</p>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Controls & Evaluation -->
+                <div class="flex justify-between items-center mt-6 gap-4">
+                    <button onclick="prevCard()" class="bg-slate-700 hover:bg-slate-600 text-white px-4 py-2.5 rounded-xl text-sm font-medium transition flex-1">← Önceki</button>
+                    <button onclick="markCard(false)" class="bg-rose-500/20 border border-rose-500/40 hover:bg-rose-500/30 text-rose-300 px-4 py-2.5 rounded-xl text-xs font-semibold transition">Tekrar Et ❌</button>
+                    <button onclick="markCard(true)" class="bg-emerald-500/20 border border-emerald-500/40 hover:bg-emerald-500/30 text-emerald-300 px-4 py-2.5 rounded-xl text-xs font-semibold transition">Biliyorum ✅</button>
+                    <button onclick="nextCard()" class="bg-slate-700 hover:bg-slate-600 text-white px-4 py-2.5 rounded-xl text-sm font-medium transition flex-1">Sonraki →</button>
+                </div>
+            </div>
+        </section>
+
+        <!-- TAB 2: ADD NOTE / QUESTION -->
+        <section id="tab-add" class="tab-content hidden max-w-xl mx-auto space-y-6">
+            <div class="bg-slate-800 border border-slate-700 rounded-2xl p-6 shadow-xl">
+                <h3 class="text-lg font-bold text-amber-400 mb-4">Kendi Notunu veya ÖABT Sorunu Ekle</h3>
+                <form id="addForm" onsubmit="saveCustomCard(event)" class="space-y-4">
+                    <div>
+                        <label class="block text-xs font-medium text-slate-300 mb-1">Kategori Seçin</label>
+                        <select id="new-category" class="w-full bg-slate-900 border border-slate-700 rounded-xl px-4 py-2.5 text-sm text-slate-100 focus:outline-none focus:border-amber-500">
+                            <option value="Karışık Not">Karışık Not</option>
+                            <option value="Tarih Metodolojisi">Tarih Metodolojisi</option>
+                            <option value="İslam Öncesi Türk Tarihi">İslam Öncesi Türk Tarihi</option>
+                            <option value="İlk Çağ Tarihi">İlk Çağ Tarihi</option>
+                            <option value="İslam Tarihi">İslam Tarihi</option>
+                            <option value="Türk-İslam Devletleri">Türk-İslam Devletleri</option>
+                            <option value="Osmanlı Tarihi">Osmanlı Tarihi</option>
+                            <option value="Avrupa Tarihi">Avrupa Tarihi</option>
+                            <option value="İnkılap Tarihi">İnkılap Tarihi</option>
+                            <option value="Çağdaş Türk ve Dünya Tarihi">Çağdaş Türk ve Dünya Tarihi</option>
+                        </select>
+                    </div>
+                    <div>
+                        <label class="block text-xs font-medium text-slate-300 mb-1">Soru veya Konu Başlığı (Ön Yüz)</label>
+                        <textarea id="new-question" rows="3" required placeholder="Kendi soru veya not başlığınızı yazın..." class="w-full bg-slate-900 border border-slate-700 rounded-xl px-4 py-2.5 text-sm text-slate-100 focus:outline-none focus:border-amber-500"></textarea>
+                    </div>
+                    <div>
+                        <label class="block text-xs font-medium text-slate-300 mb-1">Cevap / Detaylı Açıklama (Arka Yüz)</label>
+                        <textarea id="new-answer" rows="3" required placeholder="Cevabı veya kilit notu yazın..." class="w-full bg-slate-900 border border-slate-700 rounded-xl px-4 py-2.5 text-sm text-slate-100 focus:outline-none focus:border-amber-500"></textarea>
+                    </div>
+                    <button type="submit" class="w-full bg-amber-500 hover:bg-amber-400 text-slate-900 font-bold py-3 rounded-xl transition shadow-lg text-sm">Notu Havuza Kaydet</button>
+                </form>
+            </div>
+        </section>
+
+        <!-- TAB 3: MANAGE / DELETE NOTES -->
+        <section id="tab-manage" class="tab-content hidden max-w-2xl mx-auto space-y-6">
+            <div class="bg-slate-800 border border-slate-700 rounded-2xl p-6 shadow-xl space-y-4">
+                <div class="border-b border-slate-700 pb-4">
+                    <h3 class="text-lg font-bold text-rose-400">Notlarını Yönet</h3>
+                    <p class="text-xs text-slate-400">Silmek istediğiniz notun yanındaki "Sil" butonuna tıklayabilirsiniz.</p>
+                </div>
+                
+                <div id="custom-notes-list" class="space-y-3 max-h-96 overflow-y-auto pr-1">
+                    <!-- Custom notes injected via JS -->
+                </div>
+            </div>
+        </section>
+
+        <!-- PDF YAZDIRMA ALANI -->
+        <div id="pdf-print-area" class="hidden print-area">
+            <h1 style="font-size: 18px; font-weight: bold; margin-bottom: 4px; font-family: Arial, sans-serif;">ÖABT Tarih Çalışma Notlarım</h1>
+            <p style="font-size: 11px; color: #555; margin-bottom: 15px; font-family: Arial, sans-serif;">Oluşturulma Tarihi: <span id="pdf-date"></span></p>
+            <div id="pdf-content-list"></div>
+        </div>
+
+    </main>
+
+    <script>
+        let cards = [];
+        let currentIndex = 0;
+        let currentFilter = 'Tümü';
+
+        function initStorage() {
+            const saved = localStorage.getItem('oabt_tarih_cards_flat');
+            if (saved === null) {
+                cards = [];
+                syncStorage();
+            } else {
+                cards = JSON.parse(saved);
+            }
+            updateStats();
+            renderCard();
+        }
+
+        function syncStorage() {
+            localStorage.setItem('oabt_tarih_cards_flat', JSON.stringify(cards));
+            updateStats();
+        }
+
+        function exportPDF() {
+            if (cards.length === 0) {
+                alert("PDF olarak çıktısı alınacak henüz hiç notunuz yok!");
+                return;
+            }
+
+            const pdfList = document.getElementById('pdf-content-list');
+            document.getElementById('pdf-date').innerText = new Date().toLocaleDateString('tr-TR');
+            
+            pdfList.innerHTML = '';
+            cards.forEach((card, idx) => {
+                const cardBox = document.createElement('div');
+                cardBox.className = 'print-card';
+                cardBox.innerHTML = `
+                    <div style="font-size: 10px; font-weight: bold; color: #b45309; margin-bottom: 3px; font-family: Arial, sans-serif;">[${card.category}] Soru ${idx + 1}</div>
+                    <div style="font-size: 12px; font-weight: bold; margin-bottom: 5px; color: #0f172a; font-family: Arial, sans-serif;">Soru: ${card.q}</div>
+                    <div style="font-size: 11px; color: #334155; background-color: #f8fafc; padding: 6px; border-radius: 4px; font-family: Arial, sans-serif;">Cevap: ${card.a}</div>
+                `;
+                pdfList.appendChild(cardBox);
+            });
+
+            window.print();
+        }
+
+        async function shareBackup() {
+            if (cards.length === 0) {
+                alert("Paylaşılacak henüz hiç notunuz yok!");
+                return;
+            }
+
+            const fileContent = JSON.stringify(cards, null, 2);
+            const blob = new Blob([fileContent], { type: 'application/json' });
+            const fileName = `oabt_tarih_yedek_${new Date().toISOString().slice(0,10)}.json`;
+            const file = new File([blob], fileName, { type: 'application/json' });
+
+            if (navigator.canShare && navigator.canShare({ files: [file] })) {
+                try {
+                    await navigator.share({
+                        files: [file],
+                        title: 'ÖABT Tarih Yedeği',
+                        text: 'ÖABT Tarih çalışma notlarımın yedek dosyası.'
+                    });
+                } catch (error) {
+                    if (error.name !== 'AbortError') {
+                        exportData();
+                    }
+                }
+            } else {
+                exportData();
+            }
+        }
+
+        function switchTab(tabId) {
+            document.querySelectorAll('.tab-content').forEach(el => el.classList.add('hidden'));
+            document.querySelectorAll('.tab-btn').forEach(el => {
+                el.classList.remove('bg-amber-500', 'text-slate-900');
+                el.classList.add('bg-slate-700', 'text-slate-300');
+            });
+            document.getElementById(`tab-${tabId}`).classList.remove('hidden');
+            const activeBtn = document.getElementById(`btn-${tabId}`);
+            activeBtn.classList.remove('bg-slate-700', 'text-slate-300');
+            activeBtn.classList.add('bg-amber-500', 'text-slate-900');
+
+            if (tabId === 'manage') renderCustomNotesList();
+        }
+
+        function filterCategory(cat) {
+            currentFilter = cat;
+            currentIndex = 0;
+            document.querySelectorAll('.cat-btn').forEach(btn => {
+                btn.classList.remove('bg-amber-500', 'text-slate-900');
+                btn.classList.add('bg-slate-700', 'text-slate-300');
+                if (btn.innerText.includes(cat) || (cat === 'Tümü' && btn.innerText === 'Tümü')) {
+                    btn.classList.remove('bg-slate-700', 'text-slate-300');
+                    btn.classList.add('bg-amber-500', 'text-slate-900');
+                }
+            });
+            renderCard();
+        }
+
+        function getFilteredCards() {
+            if (currentFilter === 'Tümü') return cards;
+            return cards.filter(c => c.category === currentFilter);
+        }
+
+        function renderCard() {
+            const filtered = getFilteredCards();
+
+            if (filtered.length === 0) {
+                document.getElementById('card-question').innerText = "Bu kategoride henüz kart bulunmuyor.";
+                document.getElementById('card-answer').innerText = "Lütfen üst menüden 'Not / Soru Ekle' sekmesini kullanarak kart ekleyin.";
+                document.getElementById('card-cat').innerText = currentFilter;
+                return;
+            }
+
+            if (currentIndex >= filtered.length) currentIndex = 0;
+            const card = filtered[currentIndex];
+
+            document.getElementById('card-cat').innerText = card.category;
+            document.getElementById('card-question').innerText = card.q;
+            document.getElementById('card-answer').innerText = card.a;
+        }
+
+        function nextCard() {
+            const filtered = getFilteredCards();
+            if (filtered.length === 0) return;
+            currentIndex = (currentIndex + 1) % filtered.length;
+            renderCard();
+        }
+
+        function prevCard() {
+            const filtered = getFilteredCards();
+            if (filtered.length === 0) return;
+            currentIndex = (currentIndex - 1 + filtered.length) % filtered.length;
+            renderCard();
+        }
+
+        function markCard(status) {
+            const filtered = getFilteredCards();
+            if (filtered.length === 0) return;
+            const current = filtered[currentIndex];
+            const target = cards.find(c => c.id === current.id);
+            if (target) {
+                target.learned = status;
+                syncStorage();
+            }
+            nextCard();
+        }
+
+        function updateStats() {
+            const total = cards.length;
+            const learned = cards.filter(c => c.learned === true).length;
+            const repeat = cards.filter(c => c.learned === false).length;
+            const custom = cards.length;
+
+            document.getElementById('stat-total').innerText = total;
+            document.getElementById('stat-learned').innerText = learned;
+            document.getElementById('stat-repeat').innerText = repeat;
+            document.getElementById('stat-custom').innerText = custom;
+        }
+
+        function saveCustomCard(e) {
+            e.preventDefault();
+            const cat = document.getElementById('new-category').value;
+            const q = document.getElementById('new-question').value;
+            const a = document.getElementById('new-answer').value;
+
+            const newCard = {
+                id: 'c_' + Date.now(),
+                category: cat,
+                q: q,
+                a: a,
+                learned: false
+            };
+
+            cards.unshift(newCard);
+            syncStorage();
+            renderCard();
+
+            document.getElementById('addForm').reset();
+            switchTab('flashcards');
+        }
+
+        function renderCustomNotesList() {
+            const listEl = document.getElementById('custom-notes-list');
+
+            if (cards.length === 0) {
+                listEl.innerHTML = `<p class="text-sm text-slate-400 text-center py-6">Henüz eklenmiş bir not bulunmuyor.</p>`;
+                return;
+            }
+
+            listEl.innerHTML = '';
+            cards.forEach(card => {
+                const item = document.createElement('div');
+                item.className = "bg-slate-900 border border-slate-700 p-3 rounded-xl flex justify-between items-center gap-3";
+                item.innerHTML = `
+                    <div class="overflow-hidden">
+                        <span class="text-[10px] font-semibold text-amber-400 block">${card.category}</span>
+                        <p class="text-xs font-medium text-slate-200 truncate">${card.q}</p>
+                    </div>
+                    <button onclick="deleteSingleCard('${card.id}')" class="bg-rose-500/20 hover:bg-rose-500/30 text-rose-300 text-xs px-3 py-1.5 rounded-lg border border-rose-500/40 transition shrink-0">
+                        Sil
+                    </button>
+                `;
+                listEl.appendChild(item);
+            });
+        }
+
+        function deleteSingleCard(id) {
+            if (confirm("Bu notu silmek istediğinize emin misiniz?")) {
+                cards = cards.filter(c => c.id !== id);
+                syncStorage();
+                renderCustomNotesList();
+                renderCard();
+            }
+        }
+
+        function exportData() {
+            const dataStr = "data:text/json;charset=utf-8," + encodeURIComponent(JSON.stringify(cards, null, 2));
+            const downloadAnchor = document.createElement('a');
+            downloadAnchor.setAttribute("href", dataStr);
+            downloadAnchor.setAttribute("download", `oabt_tarih_yedek_${new Date().toISOString().slice(0,10)}.json`);
+            document.body.appendChild(downloadAnchor);
+            downloadAnchor.click();
+            downloadAnchor.remove();
+        }
+
+        function importData(event) {
+            const fileReader = new FileReader();
+            if (event.target.files[0]) {
+                fileReader.readAsText(event.target.files[0], "UTF-8");
+                fileReader.onload = function(e) {
+                    try {
+                        const imported = JSON.parse(e.target.result);
+                        if (Array.isArray(imported)) {
+                            cards = imported;
+                            syncStorage();
+                            renderCard();
+                            alert("Yedek başarıyla yüklendi!");
+                        } else {
+                            alert("Geçersiz dosya formatı!");
+                        }
+                    } catch (err) {
+                        alert("Dosya okunurken bir hata oluştu.");
+                    }
+                };
+            }
+        }
+
+        window.onload = initStorage;
+    </script>
+</body>
+</html>
