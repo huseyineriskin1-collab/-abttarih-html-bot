@@ -1,0 +1,265 @@
+<!DOCTYPE html>
+<html lang="tr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>ÖABT Tarih Bilgi Bankası</title>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <style>
+        :root {
+            --bg-color: #0f172a;
+            --card-bg: #1e293b;
+            --accent-color: #38bdf8;
+            --accent-hover: #0284c7;
+            --text-main: #f8fafc;
+            --text-sub: #94a3b8;
+            --border-color: #334155;
+            --danger: #ef4444;
+        }
+
+        * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+        }
+
+        body {
+            font-family: 'Inter', sans-serif;
+            background-color: var(--bg-color);
+            color: var(--text-main);
+            min-height: 100vh;
+            padding: 24px 16px;
+            display: flex;
+            justify-content: center;
+        }
+
+        .container {
+            width: 100%;
+            max-width: 680px;
+        }
+
+        header {
+            text-align: center;
+            margin-bottom: 28px;
+        }
+
+        header h1 {
+            font-size: 1.75rem;
+            font-weight: 700;
+            color: var(--text-main);
+            letter-spacing: -0.025em;
+        }
+
+        header p {
+            color: var(--text-sub);
+            font-size: 0.9rem;
+            margin-top: 6px;
+        }
+
+        .editor-card {
+            background: var(--card-bg);
+            border: 1px solid var(--border-color);
+            border-radius: 12px;
+            padding: 16px;
+            box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.3);
+            margin-bottom: 24px;
+        }
+
+        textarea {
+            width: 100%;
+            height: 110px;
+            background: #0f172a;
+            border: 1px solid var(--border-color);
+            border-radius: 8px;
+            padding: 12px;
+            color: var(--text-main);
+            font-family: inherit;
+            font-size: 0.95rem;
+            resize: vertical;
+            outline: none;
+            transition: border-color 0.2s;
+        }
+
+        textarea:focus {
+            border-color: var(--accent-color);
+        }
+
+        .btn-submit {
+            width: 100%;
+            margin-top: 12px;
+            background: var(--accent-color);
+            color: #0f172a;
+            border: none;
+            border-radius: 8px;
+            padding: 12px;
+            font-size: 0.95rem;
+            font-weight: 600;
+            cursor: pointer;
+            transition: background 0.2s;
+        }
+
+        .btn-submit:hover {
+            background: var(--accent-hover);
+        }
+
+        .section-title {
+            font-size: 1.1rem;
+            font-weight: 600;
+            margin-bottom: 14px;
+            color: var(--text-sub);
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        .notes-grid {
+            display: flex;
+            flex-direction: column;
+            gap: 12px;
+        }
+
+        .note-card {
+            background: var(--card-bg);
+            border: 1px solid var(--border-color);
+            border-radius: 10px;
+            padding: 16px;
+            position: relative;
+            transition: transform 0.15s, border-color 0.15s;
+        }
+
+        .note-card:hover {
+            border-color: #475569;
+        }
+
+        .note-content {
+            font-size: 0.95rem;
+            line-height: 1.6;
+            white-space: pre-wrap;
+            word-break: break-word;
+            margin-bottom: 12px;
+        }
+
+        .note-footer {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            border-top: 1px solid var(--border-color);
+            padding-top: 10px;
+        }
+
+        .note-date {
+            font-size: 0.75rem;
+            color: var(--text-sub);
+        }
+
+        .btn-delete {
+            background: transparent;
+            border: none;
+            color: var(--danger);
+            font-size: 0.8rem;
+            font-weight: 500;
+            cursor: pointer;
+            opacity: 0.7;
+            transition: opacity 0.2s;
+        }
+
+        .btn-delete:hover {
+            opacity: 1;
+        }
+
+        .empty-state {
+            text-align: center;
+            padding: 40px 0;
+            color: var(--text-sub);
+            font-size: 0.9rem;
+        }
+    </style>
+</head>
+<body>
+
+    <div class="container">
+        <header>
+            <h1>ÖABT Tarih Bilgi Bankası</h1>
+            <p>Hızlı Not Alma ve Çalışma Paneli</p>
+        </header>
+
+        <div class="editor-card">
+            <textarea id="noteInput" placeholder="Örn: Eski Çağ Tarihi, Hititler antlaşma maddeleri..."></textarea>
+            <button class="btn-submit" onclick="saveNote()">Notu Kaydet</button>
+        </div>
+
+        <div class="section-title">
+            <span>Kayıtlı Notlar</span>
+            <span id="noteCount" style="font-size: 0.85rem; font-weight: normal;">0 Not</span>
+        </div>
+
+        <div class="notes-grid" id="notesList"></div>
+    </div>
+
+    <script>
+        document.addEventListener("DOMContentLoaded", loadNotes);
+
+        function saveNote() {
+            const input = document.getElementById("noteInput");
+            const noteText = input.value.trim();
+
+            if (!noteText) return;
+
+            const newNote = {
+                id: Date.now(),
+                text: noteText,
+                date: new Date().toLocaleDateString('tr-TR', {
+                    day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit'
+                })
+            };
+
+            let notes = JSON.parse(localStorage.getItem("tarihoabt_notes")) || [];
+            notes.unshift(newNote);
+            localStorage.setItem("tarihoabt_notes", JSON.stringify(notes));
+
+            input.value = "";
+            loadNotes();
+        }
+
+        function deleteNote(id) {
+            let notes = JSON.parse(localStorage.getItem("tarihoabt_notes")) || [];
+            notes = notes.filter(note => note.id !== id);
+            localStorage.setItem("tarihoabt_notes", JSON.stringify(notes));
+            loadNotes();
+        }
+
+        function loadNotes() {
+            const notesList = document.getElementById("notesList");
+            const noteCount = document.getElementById("noteCount");
+            notesList.innerHTML = "";
+
+            let notes = JSON.parse(localStorage.getItem("tarihoabt_notes")) || [];
+            noteCount.textContent = `${notes.length} Not`;
+
+            if (notes.length === 0) {
+                notesList.innerHTML = `<div class="empty-state">Henüz eklenmiş bir not bulunmuyor.</div>`;
+                return;
+            }
+
+            notes.forEach(note => {
+                const card = document.createElement("div");
+                card.className = "note-card";
+                card.innerHTML = `
+                    <div class="note-content">${escapeHtml(note.text)}</div>
+                    <div class="note-footer">
+                        <span class="note-date">${note.date}</span>
+                        <button class="btn-delete" onclick="deleteNote(${note.id})">Sil</button>
+                    </div>
+                `;
+                notesList.appendChild(card);
+            });
+        }
+
+        function escapeHtml(text) {
+            const div = document.createElement('div');
+            div.textContent = text;
+            return div.innerHTML;
+        }
+    </script>
+</body>
+</html>
